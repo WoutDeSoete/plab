@@ -3,7 +3,7 @@
 
 #include <assert.h>
 
-#include "dplist.c"
+#include "lib/dplist.h"
 #include <stdint.h>
 #include <inttypes.h>
 #include <time.h>
@@ -11,10 +11,20 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "lib/dplist.h"
-
 
 dplist_t *list;
+
+#ifndef SET_MAX_TEMP
+#error SET_MAX_TEMP not set
+#endif
+
+#ifndef SET_MIN_TEMP
+#error SET_MIN_TEMP not set
+#endif
+
+#ifndef RUN_AVG_LENGTH
+#define RUN_AVG_LENGTH 5
+#endif
 
 typedef uint16_t sensor_id_t, room_id_t;
 typedef double sensor_value_t;
@@ -38,7 +48,6 @@ static sensor_node_t *head = NULL;
 //Create a new sensor node
 static sensor_node_t *create_node(sensor_id_t sid, uint16_t rid) {
     sensor_node_t *node = calloc(1, sizeof(sensor_node_t));
-    ERROR_HANDLER(node == NULL, "Memory allocation failed");
     node->sensor_id = sid;
     node->room_id = rid;
     node->buf_index = 0;
@@ -90,6 +99,12 @@ static void *element_copy(void *src_element) {
     return dst;
 }
 
+void element_free(void **element)
+{
+    free(*element);
+    *element = NULL;
+}
+
 // Compare callback: compare sensor IDs
 static int element_compare(void *x, void *y) {
     sensor_node_t *a = (sensor_node_t *)x;
@@ -102,8 +117,7 @@ static int element_compare(void *x, void *y) {
 
 void datamgr_parse_sensor_files(FILE *fp_sensor_map, FILE *fp_sensor_data)
 {
-    mapping = dpl_create(element_copy, NULL, element_compare);
-    list = dpl_create(element_copy, NULL, element_compare);
+    list = dpl_create(element_copy, element_free, element_compare);
 
     ERROR_HANDLER(fp_sensor_map == NULL, "Map file pointer is NULL");
     ERROR_HANDLER(fp_sensor_data == NULL, "Sensor data file pointer is NULL");
@@ -117,6 +131,7 @@ void datamgr_parse_sensor_files(FILE *fp_sensor_map, FILE *fp_sensor_data)
         }
         sensor_node_t *node = create_node(sensor_id, room_id);
         dpl_insert_at_index(list, node, 0, true);
+        free(node);
     }
 
 
@@ -146,4 +161,34 @@ void datamgr_parse_sensor_files(FILE *fp_sensor_map, FILE *fp_sensor_data)
         }
     }
 
+}
+
+void datamgr_free()
+{
+    dpl_free(&list, true);
+    list = NULL;
+}
+
+uint16_t datamgr_get_room_id(sensor_id_t sensor_id)
+{
+    sensor_node_t *node = find_sensor(sensor_id);
+    room_id_t room = node->room_id;
+    return room;
+}
+
+sensor_value_t datamgr_get_avg(sensor_id_t sensor_id)
+{
+    sensor_node_t *node = find_sensor(sensor_id);
+    return compute_avg(node);
+}
+
+time_t datamgr_get_last_modified(sensor_id_t sensor_id)
+{
+    sensor_node_t *node = find_sensor(sensor_id);
+    return node->last_modified;
+}
+
+int datamgr_get_total_sensors()
+{
+    return dpl_size(list);
 }
