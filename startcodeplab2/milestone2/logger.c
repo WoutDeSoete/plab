@@ -45,9 +45,11 @@ int child_loop()
             break;
         }
 
-        time(&currentTime);
 
-        fprintf(logfile, "%d - %s - %s \n", count++, ctime(&currentTime), msg_buffer);
+        time(&currentTime);
+        char *time = ctime(&currentTime);
+        time[strcspn(time, "\n")] = '\0';
+        fprintf(logfile, "%d - %s - %s", count++, time, msg_buffer);
         fflush(logfile);
     }
 
