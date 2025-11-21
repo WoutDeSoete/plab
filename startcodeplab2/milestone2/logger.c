@@ -20,6 +20,7 @@ int fd[2];
 
 int child_loop()
 {
+    printf("child loop entered\n");
     close(fd[WRITE_END]);  // child does NOT write
 
     FILE *logfile = fopen("gateway.log", "a");
@@ -28,33 +29,39 @@ int child_loop()
         exit(1);
     }
 
-    char msg_buffer[100];
+    char *msg_buffer = NULL;
+    size_t buf_size = 0;
     time_t currentTime;
     int count = 0;
-
-    while (1) {
-        memset(msg_buffer, 0, sizeof(msg_buffer));
-
-        ssize_t n = read(fd[0], msg_buffer, sizeof(msg_buffer) - 1);
-        if (n <= 0) break; // pipe closed → shutdown
-
-        msg_buffer[n] = '\0';
-
-        // Check for shutdown command
-        if (strcmp(msg_buffer, "END\n") == 0) {
-            break;
-        }
+    ssize_t n;
 
 
-        time(&currentTime);
-        char *time = ctime(&currentTime);
-        time[strcspn(time, "\n")] = '\0';
-        fprintf(logfile, "%d - %s - %s", count++, time, msg_buffer);
-        fflush(logfile);
+    FILE *log_stream = fdopen(fd[0], "r");
+    if (!log_stream) {
+        perror("fdopen");
+        exit(1);
     }
 
+    while ((n = getline(&msg_buffer, &buf_size, log_stream)) != -1)
+    {
+        if (n > 1)
+        {
+            if (strcmp(msg_buffer, "END\n") == 0) break;
+
+            printf("child: logging message: %s\n", msg_buffer);
+
+            time(&currentTime);
+            char *time = ctime(&currentTime);
+            time[strcspn(time, "\n")] = '\0';
+            fprintf(logfile, "%d - %s - %s", count++, time, msg_buffer);
+            fflush(logfile);
+        }
+
+    }
+
+
     fclose(logfile);
-    close(fd[0]);
+    fclose(log_stream);
     exit(0);
 }
 
@@ -76,6 +83,7 @@ int create_log_process(){
     if (pid == 0)
     {
         child_loop();
+        printf("child loop skipped\n");
     }
     close(fd[READ_END]); // parent doesn't read
     return 0;
@@ -86,14 +94,16 @@ int write_to_log_process(char *msg)
 {
     if (pid <= 0) return -1;
     if (!msg) return -1;
+    printf("[LOG WRITE] %s", msg);
 
-    write(fd[WRITE_END], msg, strlen(msg)+1);
+    write(fd[WRITE_END], msg, strlen(msg));
     return 0;
 }
 
 int end_log_process()
 {
     if (pid <= 0) return -1;
+    printf("ending process\n");
 
     write(fd[WRITE_END], "END\n", 5);
     close(fd[WRITE_END]);
