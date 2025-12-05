@@ -25,7 +25,6 @@ typedef struct {
 typedef struct {
     sbuffer_t *buf;
     const char *input_path;
-	pthread_mutex_t *file_lock;
 } writer_args_t;
 
 typedef struct {
@@ -39,7 +38,6 @@ void *writer_thread(void *arg) {
     writer_args_t *writer = arg;
     sbuffer_t *buf = writer->buf;
     const char *path = writer->input_path;
-	pthread_mutex_t *lock = writer->file_lock;
     FILE *sensor_data = fopen(path, "rb");
     if (!sensor_data) {
         perror("fopen sensor_data");
@@ -73,12 +71,10 @@ void *writer_thread(void *arg) {
 		sd.value = temp;
 		sd.ts = ts;
 
-		pthread_mutex_lock(lock);
         if (sbuffer_insert(buf, &sd) != 0) {
             fprintf(stderr, "Failed to insert into sbuffer\n");
             break;
         }
-		pthread_mutex_unlock(lock);
         //insert one measurement every 10 ms
         usleep(10000);
     }
@@ -144,7 +140,7 @@ int main(void) {
     pthread_mutex_t file_lock;
     pthread_mutex_init(&file_lock, NULL);
 
-    writer_args_t wa = { .buf = buf, .input_path = SENSOR_FILE , .file_lock = &file_lock };
+    writer_args_t wa = { .buf = buf, .input_path = SENSOR_FILE };
     if (pthread_create(&writer, NULL, writer_thread, &wa) != 0) {
         perror("pthread_create writer");
         fclose(csv);

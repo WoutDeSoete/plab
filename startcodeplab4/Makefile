@@ -1,5 +1,5 @@
 all:
-	gcc -Wall -Wextra -std=c11 -pthread -O2 main.c sbuffer.c -o main
+	gcc -Wall -Wextra -pthread -O2 main.c sbuffer.c -o main
 
 run: all
 	./main
